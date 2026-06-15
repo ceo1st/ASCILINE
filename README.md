@@ -208,7 +208,6 @@ Because this engine bypasses standard browser constraints and ad-blockers (by re
 ### 🟢 Live Interactive Showcase
 Experience the ASCILINE engine running live directly in your browser with multiple rendering modes. 👉 **[Try it out at asciline.dev](https://www.asciline.dev)**
 
-> **Note for developers:** To achieve infinite scalability and zero server costs, this specific showcase uses the pre-compiled `.ascf` static architecture. You can generate your own static files using the newly added `Compiler.py`!
 
 ## 📈 Star History
 [![Star History Chart](https://api.star-history.com/svg?repos=YusufB5/ASCILINE&type=Date)](https://star-history.com/#YusufB5/ASCILINE&Date)
