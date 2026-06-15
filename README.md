@@ -126,7 +126,6 @@ python stream_server.py --playlist playlist.json --cols 220 --loop
 ```
 Use `playlist.json` when you need different `--mode` or `--vol` settings for each video.
 
-> 💡 **Windows Users:** You can use the included `serve.bat` shortcut for quicker typing: `.\serve video.mp4 --cols 240`
 
 Open `http://localhost:8000` in your browser.
 
@@ -135,8 +134,7 @@ If you prefer to bypass the web interface, you can render the video directly ins
 ```bash
 python ascii_video_player2.py video.mp4 --cols 100 --quality 0
 ```
-> 💡 **Windows Users:** Use the shortcut `.\play video.mp4 -c 100 -q 0`
-> 
+
 > ⚠️ **Note:** Do not resize your terminal window during playback, as dynamic text wrapping will corrupt the ASCII layout.
 
 ## 🎨 Customization
