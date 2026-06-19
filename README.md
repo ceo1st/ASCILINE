@@ -131,12 +131,10 @@ Use `playlist.json` when you need different `--mode` or `--vol` settings for eac
 Open `http://localhost:8000` in your browser.
 
 ### Player Controls
-Hover previews are built once per video on first hover and kept in memory. Start with
-```bash
---no-thumbnails
-```
-to disable them.
-To use your own prebuilt sprite, point the /scrub route at it.
+
+Hover previews are built once per video on first hover, in a single ffmpeg pass,
+and kept in memory — nothing written to disk. Disable with `--no-thumbnails`.
+To use a prebuilt sprite instead, point the `/scrub` route at it.
 
 ### 4. Run directly in Terminal (Standalone)
 If you prefer to bypass the web interface, you can render the video directly inside an ANSI-supported terminal (zero-flicker, true color):
