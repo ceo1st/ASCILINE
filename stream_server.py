@@ -22,13 +22,66 @@ import uvicorn
 import os
 from urllib.parse import urlparse
 from websockets.exceptions import ConnectionClosed
+from contextlib import asynccontextmanager
 
 # Import the existing engine (ascii_video_player2.py)
 from ascii_video_player2 import VideoDecoder, AsciiMapper
 from codec import encode_frame
 import ytdl
 
-app = FastAPI()
+_download_locks = {}
+
+async def safe_resolve_video_path(vid: str):
+    """Safely downloads a video without blocking the event loop and prevents concurrent downloads of the same video."""
+    if not ytdl.is_url(vid):
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, resolve_video_path, vid)
+        
+    if vid not in _download_locks:
+        _download_locks[vid] = asyncio.Lock()
+    async with _download_locks[vid]:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, resolve_video_path, vid)
+
+async def prefetch_worker():
+    """Background task that ensures the next video in the queue is downloaded."""
+    while True:
+        try:
+            queue = getattr(app.state, "queue", [])
+            idx = getattr(app.state, "current_index", 0)
+            loop_opt = getattr(app.state, "loop", False)
+            
+            if len(queue) > 0:
+               #download queque protect
+                current_entry = queue[idx]
+                if ytdl.is_url(current_entry["video"]):
+                    await asyncio.sleep(2)
+                    continue
+
+                next_idx = idx + 1
+                if next_idx >= len(queue) and loop_opt:
+                    next_idx = 0
+                    
+                if next_idx < len(queue):
+                    next_entry = queue[next_idx]
+                    vid = next_entry["video"]
+                    if ytdl.is_url(vid):
+                        print(f"[YT] pre-fetching ({next_idx + 1}/{len(queue)}) in background...")
+                        local_path = await safe_resolve_video_path(vid)
+                        next_entry["video"] = local_path
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            pass
+        await asyncio.sleep(2)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(prefetch_worker())
+    yield
+    task.cancel()
+
+app = FastAPI(lifespan=lifespan)
 
 
 def get_video_dimensions(path: str) -> tuple[int, int]:
@@ -93,7 +146,8 @@ def resolve_video_path(video: str) -> str:
     Returns the first path that exists, or the original string if none found.
     """
     if ytdl.is_url(video):
-        return ytdl.download(video, cache_dir=os.path.join(BASE_DIR, "videos"))
+        cache_limit = getattr(app.state, "cache_limit", 10 * 1024**3)
+        return ytdl.download(video, cache_dir=os.path.join(BASE_DIR, "videos"), cache_limit=cache_limit)
 
     candidates = [
         video,
@@ -435,7 +489,7 @@ async def websocket_endpoint(websocket: WebSocket):
             if ytdl.is_url(video_path):
                 print(f"[YT] fetching ({queue_index + 1}/{len(queue)}) {video_path}")
                 try:
-                    video_path = resolve_video_path(video_path)
+                    video_path = await safe_resolve_video_path(video_path)
                     entry["video"] = video_path
                 except Exception as e:
                     await websocket.send_text(f"Error: could not fetch '{video_path}': {e}")
@@ -894,6 +948,7 @@ if __name__ == "__main__":
     srv.add_argument("--host", default="127.0.0.1", help="Bind address (default 127.0.0.1; use 0.0.0.0 to expose on LAN)")
     srv.add_argument("--port", type=int, default=8000, help="Server port (default: 8000)")
     srv.add_argument("--debug", action="store_true", default=False, help="Enable bandwidth debug logging (RAW vs WIRE)")
+    srv.add_argument("--cache-limit", type=int, default=10240, help="Cache limit in MB for downloaded videos (default: 10240 = 10GB)")
 
     args = parser.parse_args()
 
@@ -921,6 +976,7 @@ if __name__ == "__main__":
     app.state.tolerance     = {"lossless": 0, "high": 4, "balanced": 8, "low": 16}[args.quality]
     app.state.debug         = args.debug
     app.state.thumbnails    = not args.no_thumbnails
+    app.state.cache_limit   = args.cache_limit * 1024**2
     global_default_cols     = args.cols if args.cols is not None else (450 if args.pixel else 200)
     app.state.cols          = global_default_cols
     app.state.rows          = args.rows

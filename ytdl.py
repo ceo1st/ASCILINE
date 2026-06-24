@@ -129,7 +129,7 @@ def _probe_remote(url: str) -> tuple[str, bool]:
     return video_id, is_live
 
 
-def download(url: str, cache_dir: str = "videos") -> str:
+def download(url: str, cache_dir: str = "videos", cache_limit: int = 10 * 1024**3) -> str:
     """Download `url` (<=480p) into cache_dir as a canonical mp4 and return the path."""
     _require_ytdlp()
     os.makedirs(cache_dir, exist_ok=True)
@@ -145,6 +145,7 @@ def download(url: str, cache_dir: str = "videos") -> str:
         cached = os.path.join(cache_dir, f"{quick_id}.mp4")
         if os.path.exists(cached):
             print(f"[YT] cached: {cached}")
+            os.utime(cached, None)  # Update mtime for LRU Garbage Collection
             return cached
 
     video_id, is_live = _probe_remote(url)
@@ -155,6 +156,7 @@ def download(url: str, cache_dir: str = "videos") -> str:
     out = os.path.join(cache_dir, f"{video_id}.mp4")
     if os.path.exists(out):
         print(f"[YT] cached: {out}")
+        os.utime(out, None)  # Update mtime for LRU Garbage Collection
         return out
 
     print(f"[YT] downloading {url}  (<=480p) ...")
@@ -184,7 +186,55 @@ def download(url: str, cache_dir: str = "videos") -> str:
         raise
 
     print(f"[YT] saved: {out}")
+    enforce_cache_limit(cache_dir, max_bytes=cache_limit)
     return out
+
+def enforce_cache_limit(cache_dir: str, max_bytes: int = 10 * 1024**3) -> None:
+    """
+    Ensure the cache directory stays under `max_bytes` (default 10GB).
+    Deletes the least recently used (LRU) files first.
+    Safeguards:
+    - Never deletes the single newest file (even if it alone exceeds the limit).
+    - Ignores OS-locked files (which naturally protects the currently playing video on Windows).
+    """
+    if not os.path.exists(cache_dir):
+        return
+
+    import re
+    yt_pattern = re.compile(r"^[A-Za-z0-9_-]{11}\.mp4$")
+
+    files = []
+    total_size = 0
+    for entry in os.scandir(cache_dir):
+        if entry.is_file() and yt_pattern.match(entry.name):
+            try:
+                stat = entry.stat()
+                size = stat.st_size
+                # Using mtime since os.utime(path, None) updates it on cache hits
+                files.append((entry.path, stat.st_mtime, size))
+                total_size += size
+            except OSError:
+                continue
+
+    if total_size <= max_bytes or len(files) <= 1:
+        return
+
+    # Sort oldest first (smallest mtime)
+    files.sort(key=lambda x: x[1])
+
+    # Keep at least the 1 newest file so we never delete what we literally just downloaded
+    files_to_check = files[:-1]
+
+    for path, _, size in files_to_check:
+        if total_size <= max_bytes:
+            break
+        try:
+            os.remove(path)
+            total_size -= size
+            print(f"[YT-GC] Deleted {os.path.basename(path)} (freed {size / 1024**2:.1f} MB)")
+        except OSError:
+            # File is locked by another process (e.g., currently playing in OpenCV)
+            pass
 
 
 def _unlink(path: str) -> None:
