@@ -120,7 +120,7 @@ async def prefetch_worker():
         except asyncio.CancelledError:
             break
         except Exception as e:
-            pass
+            print(f"[WARN] prefetch_worker error: {e}")
         await asyncio.sleep(2)
 
 @asynccontextmanager
