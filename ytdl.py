@@ -52,7 +52,9 @@ _PROBE_TIMEOUT = 60    # ffprobe / metadata reads
 _ENCODE_TIMEOUT = 1800  # ffmpeg re-encode of a long video
 
 
-def is_url(s: str) -> bool:
+def is_url(s) -> bool:
+    if not isinstance(s, str):
+        return False
     s = s.lower()
     return s.startswith(("http://", "https://")) or "youtube.com" in s or "youtu.be" in s
 
