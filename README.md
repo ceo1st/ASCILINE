@@ -13,8 +13,8 @@
 | Output | Details |
 | :--- | :--- |
 | <img src="https://github.com/user-attachments/assets/ccc727c9-c697-49f2-85e1-6f8c366f2019" width="400" alt="Original Source" /> | **Original Source**<br>Standard MP4 video file. |
-| <img src="https://github.com/user-attachments/assets/6bd7f5c0-81de-49fe-ba0d-9a8872ec8ae3" width="400" alt="ASCII Mode" /> | **ASCII Mode**<br>Showcases rendered using Mode 3 (32K Colors) from a 30fps source. |
-| <img src="https://github.com/user-attachments/assets/1fd88c3d-97d1-441a-a071-16de24ea82c0" width="400" alt="PIXEL Mode" /> | **PIXEL Mode**<br>Showcases rendered using Mode 5 (16m Colors) combined with the `--pixel` flag for ultra-high fidelity. |
+| <img src="https://github.com/user-attachments/assets/6bd7f5c0-81de-49fe-ba0d-9a8872ec8ae3" width="400" alt="ASCII Mode" /> | **ASCII Mode**<br>Showcases rendered using Mode 4 (32K Colors) from a 30fps source. |
+| <img src="https://github.com/user-attachments/assets/1fd88c3d-97d1-441a-a071-16de24ea82c0" width="400" alt="PIXEL Mode" /> | **PIXEL Mode**<br>Showcases rendered using the `--pixel` flag for ultra-high fidelity 16M colors. |
 
 ## 🎯 Strategic Vision & Core Capabilities
 
@@ -44,7 +44,7 @@ No autoplay restrictions. To the browser, it's just text on a canvas.
 3.  **Communication**: Optimized WebSocket protocol with a custom `INIT` handshake for dynamic resolution/FPS adjustment.
 
 
-## 🗜️ Adaptive Frame Codec (opt-in,valid for ASCI mod [2-5])
+## 🗜️ Adaptive Frame Codec (opt-in, valid for ASCII modes [2-6])
 
 The original binary protocol re-sends the full grid every frame. An opt-in
 adaptive codec picks the smallest of three encodings per frame and tags it in a
@@ -62,7 +62,7 @@ forced periodically so dropped packets / late joiners resync. The decoder
 (`codec.js`) is shared by the browser and the test suite, so the shipped path is
 the tested one.
 
-**Measured wire savings** (mode 5, 200×80 grid):
+**Measured wire savings** (mode 6, 200×80 grid):
 
 | content | vs. legacy |
 | :------ | :--------- |
@@ -178,7 +178,7 @@ python stream_server.py --cache-limit 5000
 ```bash
 python stream_server.py --folder videos --cols 200
 python stream_server.py --folder videos --cols 230 --loop          # infinite loop
-python stream_server.py --folder videos --mode 5 --pixel --cols 320 --vol 2  # all videos same settings
+python stream_server.py --folder videos --pixel --cols 320 --vol 2  # all videos same settings
 ```
 Videos play in **filesystem order** (top to bottom as they appear in the folder, not alphabetically). Just add/remove files from the `videos/` folder to control the queue.
 
@@ -251,13 +251,14 @@ Click the **⚙FX** button on the player controls (or press the **`F`** key) to 
 ### Rendering Modes
 The engine supports different fidelity levels via the `--mode` flag:
 - `1`: Black & White (DOM mode)
-- `2`: 512 Colors
-- `3`: 32K Colors
-- `4`: 262K Colors
-- `5`: 16M Colors (Ultra)
+- `2`: 64 colors
+- `3`: 512 colors
+- `4`: 32K colors
+- `5`: 262K colors
+- `6`: 16M colors (ultra)
 
 ```bash
-python stream_server.py --mode 5 --cols 240 --rows 100
+python stream_server.py --mode 6 --cols 240 --rows 100
 ```
 ### 📐 Resolution & Auto-Scaling
 By default, you only need to specify the width (`--cols`). ASCILINE will automatically calculate the correct `--rows` based on the source video's aspect ratio to prevent stretching.
