@@ -8,113 +8,102 @@
 
 ```
 
-**ASCILINE** is a high-performance, cross-platform real-time ASCII video rendering engine. **Our core objective is to transform the web into a highly dynamic and interactive typographic canvas.** By mapping pixels to text-based representations, we unlock new possibilities for web media delivery.
+**ASCILINE** is a high-performance, cross-platform real-time ASCII video rendering engine. It maps pixels to text-based representations and streams the result over a low-overhead binary protocol, turning the browser canvas into a typographic display surface.
 
 | Output | Details |
 | :--- | :--- |
 | <img src="https://github.com/user-attachments/assets/ccc727c9-c697-49f2-85e1-6f8c366f2019" width="400" alt="Original Source" /> | **Original Source**<br>Standard MP4 video file. |
-| <img src="https://github.com/user-attachments/assets/6bd7f5c0-81de-49fe-ba0d-9a8872ec8ae3" width="400" alt="ASCII Mode" /> | **ASCII Mode**<br>Showcases rendered using Mode 4 (32K Colors) from a 30fps source. |
-| <img src="https://github.com/user-attachments/assets/1fd88c3d-97d1-441a-a071-16de24ea82c0" width="400" alt="PIXEL Mode" /> | **PIXEL Mode**<br>Showcases rendered using the `--pixel` flag for ultra-high fidelity 16M colors. |
+| <img src="https://github.com/user-attachments/assets/6bd7f5c0-81de-49fe-ba0d-9a8872ec8ae3" width="400" alt="ASCII Mode" /> | **ASCII Mode**<br>Rendered using Mode 3 (32K colors) from a 30fps source. |
+| <img src="https://github.com/user-attachments/assets/1fd88c3d-97d1-441a-a071-16de24ea82c0" width="400" alt="PIXEL Mode" /> | **PIXEL Mode**<br>Rendered using Mode 5 (16M colors) combined with the `--pixel` flag for ultra-high fidelity. |
 
-## 🎯 Strategic Vision & Core Capabilities
+## Design Goals
 
-1. **Pure Typographic Manipulation**: The visual stream is not a standard media file—it's raw HTML/Canvas text. This makes the impossible possible: you can apply real-time CSS filters (neon glows, text shadows, animations) to video content.
-2. **Local AI & LLM Ready**: By reducing complex pixel streams into structured logical strings, ASCILINE acts as a perfect bridge for AI. Instead of feeding heavy computer vision models, lightweight LLMs can process semantic video summaries.
-3. **Ultra-Low Bandwidth & Zero GPU (valid for ASCII MOD)**: Standard codecs (H.264/VP9) require dedicated hardware decoders, choking microcontrollers and weak devices. ASCILINE offloads the heavy lifting to the backend, streaming only lightweight text frames. By scaling down the output quality (using fewer columns), extremely low bandwidth requirements can be achieved. This means you can play fluid, real-time video on devices with constrained networks and zero GPU capabilities (smart appliances, retro terminals, basic microcontrollers).
-4. **🌐 Works Everywhere**: No `<video>`  tags. No browser-side decoding. 
-No autoplay restrictions. To the browser, it's just text on a canvas.
+1. **Pure typographic manipulation**: the visual stream is raw HTML/Canvas text, not a standard media file. That means real-time CSS filters (glows, shadows, animations) can be applied directly to what would otherwise be a video.
+2. **Zero GPU, ultra-low bandwidth (ASCII modes)**: standard codecs (H.264/VP9) need dedicated hardware decoders, which chokes microcontrollers and weak devices. ASCILINE does the heavy lifting server-side and streams lightweight text frames — fewer columns means proportionally less bandwidth. This makes fluid playback possible on constrained networks and zero-GPU devices (smart appliances, retro terminals, basic microcontrollers).
+3. **Works everywhere**: no `<video>` tag, no browser-side codec decoding, no autoplay restrictions. To the browser, it's just text on a canvas.
 
-## 🚀 Technical Features
+> **Roadmap idea, not implemented yet:** because ASCII output is already a compact, structured text representation, it could in principle serve as a lightweight input for downstream text/LLM processing instead of feeding raw pixel streams to a vision model. Nothing in the current codebase does this — flagging it here as a direction, not a shipped feature.
 
--   **Cross-Platform**: Runs seamlessly on Windows, macOS, and Linux.
--   **Real-Time ASCII Streaming**: Low-latency video-to-ASCII conversion.
--   **Real-Time Pixel Streaming**: Replaces characters with colored blocks, approaching 360p video quality.
--   **High Performance**: Uses **HTML5 Canvas** for rendering, optimized for cinematic 24-30 FPS playback. High-FPS sources are automatically decimated for stability.
--   **Master Clock Sync**: The audio track acts as the absolute master clock, guaranteeing perfect A/V synchronization.
--   **Low-Overhead Binary Protocol**: Frames are streamed as raw binary (`Uint8Array`) directly to the canvas, saving bandwidth and CPU.
--   **Multiple Color Modes**: Supports everything from classic B&W to 16M color ultra-fidelity.
--   **Flexible Video Management**: Supports JSON playlists (per-video mode & volume), 
-      folder-based auto-queuing (filesystem order), single-file mode, and infinite loop 
-      playback — all controlled via CLI arguments.
+## Technical Features
 
-## 🛠️ Architecture
+- **Cross-platform**: Windows, macOS, Linux.
+- **Real-time ASCII and pixel streaming**: low-latency video-to-text conversion; pixel mode replaces characters with colored blocks, approaching 360p quality.
+- **HTML5 Canvas rendering**, tuned for 24–30 FPS playback. Higher-FPS sources are automatically decimated for stability.
+- **Master clock sync**: the audio track is the absolute time reference, keeping A/V synchronized.
+- **Low-overhead binary protocol**: frames are streamed as raw `Uint8Array` straight to the canvas.
+- **Multiple color modes**: from black & white up to 16M-color ultra-fidelity.
+- **Flexible video management**: JSON playlists (per-video mode & volume), folder-based auto-queuing, single-file mode, infinite loop — all via CLI flags.
 
-1.  **Backend (Python/FastAPI)**: Decodes video using OpenCV, maps pixels to ASCII characters via NumPy, and streams binary data.
-2.  **Frontend (Vanilla JS)**: Receives binary frames via WebSockets, manages a jitter buffer, and renders to a Canvas grid.
-3.  **Communication**: Optimized WebSocket protocol with a custom `INIT` handshake for dynamic resolution/FPS adjustment.
+## Architecture
 
+1. **Backend (Python/FastAPI)**: decodes video via OpenCV, maps pixels to ASCII via NumPy, streams binary frames.
+2. **Frontend (vanilla JS)**: receives binary frames over WebSocket, manages a jitter buffer, renders to a canvas grid.
+3. **Communication**: a custom `INIT` handshake negotiates resolution/FPS, followed by the binary frame stream.
 
-## 🗜️ Adaptive Frame Codec (opt-in, valid for ASCII modes [2-6])
+## Adaptive Frame Codec (opt-in, ASCII modes 2–5)
 
-The original binary protocol re-sends the full grid every frame. An opt-in
-adaptive codec picks the smallest of three encodings per frame and tags it in a
-1-byte header — **without changing the rendered output**:
+The original protocol re-sends the full grid every frame. An opt-in adaptive codec picks the smallest of several encodings per frame and tags it with a 1-byte header, without changing the rendered output:
 
 | tag | encoding | best for |
 | :-- | :------- | :------- |
 | `0` RAW | framebuffer as-is (legacy) | incompressible frames |
 | `1` ZLIB | `zlib(framebuffer)` | general motion |
 | `2` DELTA | only the cells that changed since the last frame | static / low-motion |
+| `3` RLE_FULL | run-length encoded framebuffer | large flat-color regions |
 
-Clients opt in with `/ws?codec=adaptive`; omit it and you get the **original
-protocol byte-for-byte**, so existing clients are unaffected. A keyframe is
-forced periodically so dropped packets / late joiners resync. The decoder
-(`codec.js`) is shared by the browser and the test suite, so the shipped path is
-the tested one.
+Clients opt in with `/ws?codec=adaptive`; omit it and you get the original protocol byte-for-byte, so existing clients are unaffected. A keyframe is forced periodically so dropped packets / late joiners resync.
 
-**Measured wire savings** (mode 6, 200×80 grid):
+`codec.js` (the shared decoder used by both the live player and the test suite) understands all four tags. **Not every encoder produces all four**, though: the Python side (`codec.py`, used by the live server and by `static_player/compiler.py`) can emit RLE_FULL when it wins the size comparison. The browser-side JS encoder (`static_player/studio/encoder.js`, used by the client-only Studio compiler) intentionally only emits RAW/ZLIB/DELTA — it doesn't implement RLE run-building, to keep the in-browser encoder simple. RAW/ZLIB/DELTA already cover most cases reasonably well, so this is a deliberate simplicity/size trade-off, not a bug — decoders stay permissive, encoders stay conservative.
+
+**Measured wire savings** (mode 5, 200×80 grid):
 
 | content | vs. legacy |
 | :------ | :--------- |
 | static screen / slideshow | **0.3%** (≈375×) |
 | high-motion / full-frame change | 63% (never worse than legacy) |
 
-An optional `--quality {lossless,high,balanced,low}` enables lossy *temporal
-delta*: a colour cell is only re-sent once it drifts past a tolerance from what
-the viewer already sees (the character plane stays exact), cutting the hard
-cases a further ~15–30% at imperceptible quality. Default is `lossless`
-(bit-exact).
+An optional `--quality {lossless,high,balanced,low}` enables lossy *temporal delta*: a color cell is only re-sent once it drifts past a tolerance from what the viewer already sees (the character plane stays exact), cutting the hard cases a further ~15–30% at imperceptible quality. Default is `lossless` (bit-exact).
 
-**Monitor Bandwidth in Real-Time:**
-You can append the `--debug` flag when launching the server to see live bandwidth comparisons (RAW vs WIRE bytes) and the exact compression ratio in your terminal. This is highly useful for measuring the real-time savings of the adaptive codec on your specific video sources.
+**Monitor bandwidth in real time:** pass `--debug` when launching the server to see live RAW vs WIRE byte comparisons and the compression ratio in your terminal.
 
-> Verified two independent ways, both **bit-exact**: Python-encoded vectors
-> decoded by `codec.js` in Node (`experiments/gen_vectors.py` →
-> `experiments/check_vectors.js`), and a live `adaptive`-vs-`legacy` WebSocket
-> diff (`experiments/test_e2e.js`). Generate the test clips with
-> `experiments/make_test_clips.sh`. (A fuller mutation-test + Autobahn
+> Verified two independent ways, both bit-exact: Python-encoded vectors decoded by `codec.js` in Node (`experiments/gen_vectors.py` → `experiments/check_vectors.js`), and a live `adaptive`-vs-`legacy` WebSocket diff (`experiments/test_e2e.js`). Generate test clips with `experiments/make_test_clips.sh`.
 
-**LAN / Network Streaming:**
-To stream the video on your local network (Wi-Fi), use the `--host` flag:
-> python stream_server.py video.mp4 --host 0.0.0.0
-
-## ⚡ Zero-Dependency Static Web Player
-
-ASCILINE features a **standalone, zero-dependency static HTML player**. You can compile any video into our custom `.ascf` (ASCII Compressed Format) and host it *anywhere* (GitHub Pages, Vercel, Netlify) without needing a Python backend.
-
-> 💡 **Trade-off Notice:** Compiled `.ascf` files are naturally larger than standard `.mp4` files. However, this trade-off unlocks unprecedented possibilities: true DOM-level interaction, pixel-perfect text selection, and complete independence from browser video codecs.
-
-### Basic Workflow
-
-**1. Compile Your Video:**
-First, compile your standard video into the `.ascf` format using the static compiler:
-
+**LAN / network streaming:** use `--host` to expose the server on your network.
 ```bash
-python static_player/compiler.py your_video.mp4 --cols 250 --pixel --quantize 2 
+python stream_server.py video.mp4 --host 0.0.0.0
 ```
 
-**Compiler-Specific Optimization Flags:**
-* `--quantize 0-3`: Drops color bits to drastically reduce file size (0=lossless, 1=slight, 2=medium, 3=aggressive).
-* `--tolerance`: Sets color drift tolerance to avoid updating pixels with invisible color changes.
-* `--hard`: Uses maximum zlib compression (level 9). Slower to compile, but results in a smaller output file.
+## Zero-Dependency Static Web Player
 
-**2. Implement:**
-Place the generated `.ascf` file next to `static_player/index.html` and open it through any local web server to enjoy zero-latency playback!
+ASCILINE can compile a video into a self-contained `.ascf` (ASCII Compressed Format) file and play it back with a static HTML page — no Python backend at runtime, hostable anywhere (GitHub Pages, Vercel, Netlify).
 
-> ⚠️ **Best Practice:** We highly recommend compiling short clips (under 5-10 minutes). Because the `.ascf` format stores raw render instructions for the canvas, compiling full-length movies will result in massive file sizes that may exceed your browser's memory limits.
+> **Trade-off:** compiled `.ascf` files are naturally larger than standard `.mp4`. In exchange you get true DOM-level interaction, pixel-perfect text selection, and no dependency on the browser's video codecs.
 
+There are two ways to produce a `.ascf` file:
 
-## 📦 Installation
+### 1. Python compiler (more capable and faster — the recommended default)
+
+```bash
+python static_player/compiler.py your_video.mp4 --cols 250 --pixel --quantize 2
+```
+
+- `--quantize 0-3`: drops color bits to reduce file size (0 = lossless, 3 = aggressive).
+- `--tolerance`: color drift tolerance before a pixel update is sent, to skip invisible changes.
+- `--hard`: max zlib compression (level 9) — slower to compile, smaller output.
+
+This is what powers the live demo at [asciline.dev](https://www.asciline.dev): the static clips there are compiled with this Python path.
+
+### 2. Browser Studio — compile without installing anything
+
+`static_player/studio/` is a standalone page (`index.html` + `encoder.js`, using `pako` from a CDN for deflate) that compiles a video to `.ascf` **entirely client-side** — drop a video in, get a `.ascf` out, nothing ever leaves the browser and no Python is required. It's the more experimental of the two paths (see the codec note above: it only emits RAW/ZLIB/DELTA, not RLE_FULL) and is best for quick, short clips rather than production output — for anything longer or size-sensitive, use the Python compiler.
+
+### Playing a compiled file
+
+Place the generated `.ascf` next to `static_player/index.html` and open it through any local web server.
+
+> **Best practice:** compile short clips (under 5–10 minutes). `.ascf` stores raw render instructions for the canvas, so full-length movies can produce file sizes that exceed your browser's memory limits.
+
+## Installation
 
 ### 1. Clone the repository
 ```bash
@@ -127,199 +116,191 @@ cd ASCILINE
 pip install fastapi uvicorn opencv-python numpy websockets
 ```
 
+Running headless (server / no display, e.g. a VPS or container)? `opencv-python-headless` is a lighter drop-in replacement for `opencv-python` and avoids pulling in GUI dependencies you won't use.
+
 **Optional — play from YouTube (and other yt-dlp sites):**
 ```bash
 pip install yt-dlp
 ```
-Only needed if you pass a URL instead of a local file. Local playback works
-without it. URL playback also uses FFmpeg (see below) to normalize downloads.
+Only needed if you pass a URL instead of a local file. Local playback works without it. URL playback also uses FFmpeg (see below) to normalize downloads.
 
-### 🔈 Audio & Thumbnails Support (FFmpeg & FFprobe Required)
-To enable server-side audio processing (Volume 1-5), you must have FFmpeg installed.
+### FFmpeg & FFprobe (required for audio and thumbnails)
 
-**Option 1: Package Manager (Recommended)**
-- **Windows:** `winget install ffmpeg`
-- **macOS:** `brew install ffmpeg`
-- **Linux:** `sudo apt install ffmpeg`
+**Package manager (recommended):**
+- Windows: `winget install ffmpeg`
+- macOS: `brew install ffmpeg`
+- Linux: `sudo apt install ffmpeg`
 
-**Option 2: Manual Installation (Windows)**
-If you get a `FileNotFoundError` or don't want to modify system variables:
-1. Download [FFmpeg ZIP](https://github.com/BtbN/FFmpeg-Builds/releases/latest).
-2. Extract **both** `ffmpeg.exe` and `ffprobe.exe` from the `bin` folder.
-3. Drop them directly into your `ASCILINE` project folder alongside `stream_server.py`.
-### 3. Run the Web Server
+**Manual (Windows):** if you hit a `FileNotFoundError` or don't want to touch system variables, download the [FFmpeg ZIP](https://github.com/BtbN/FFmpeg-Builds/releases/latest), extract `ffmpeg.exe` and `ffprobe.exe` from `bin/`, and drop both into the project folder next to `stream_server.py`.
+
+### 3. Run the web server
 
 **Single video:**
 ```bash
 python stream_server.py video.mp4 --cols 240
 ```
 
-**YouTube / URL (requires `yt-dlp`):** pass any yt-dlp-supported URL in place of a file.
+**YouTube / URL (requires `yt-dlp`):**
 ```bash
 python stream_server.py "https://youtu.be/VIDEO_ID" --cols 240
 python stream_server.py "https://www.youtube.com/playlist?list=..." --cols 220 --loop
 ```
-**🧹Garbage Collection for yt**
 
-ASCILINE includes a built-in LRU (Least Recently Used) garbage collector for on-demand YouTube downloads. To prevent your server's disk space from overflowing, you can set a maximum cache limit.
-You can set the limit in Megabytes (MB) using the `--cache-limit` flag. By default, it is set to `10240` (10 GB).
-
+**Garbage collection for cached downloads:** ASCILINE includes an LRU cache limiter for on-demand YouTube downloads so disk usage doesn't grow unbounded.
 ```bash
-# Set the maximum video cache size to 5000 MB (5 GB)
-python stream_server.py --cache-limit 5000
+python stream_server.py --cache-limit 5000   # cap the video cache at 5 GB (default 10240 MB)
 ```
-### ⚙️ How It Works
-* **Bandwidth Optimized:** ASCII rendering only requires a tiny grid, so yt-dlp automatically fetches videos at ≤480p to save bandwidth.
-* **Smart Caching:** Videos are downloaded and cached by their ID in the `videos/` folder. Replays are instant!
-* **Lazy Loading:** Playlist/channel URLs or `playlist.json` files expand into a queue and fetch videos strictly *on-demand*. The server starts immediately instead of waiting for bulk downloads.
-* **Standardized Playback:** Every downloaded video is normalized to a standard H.264/AAC constant-frame-rate format. This ensures flawless audio/video synchronization regardless of the original source codec.
 
-**Folder mode — drop your videos into `videos/` and run:**
+**How caching works:**
+- ASCII rendering only needs a small grid, so yt-dlp fetches at ≤480p to save bandwidth.
+- Downloads are cached by video ID in `videos/` — replays are instant.
+- Playlist/channel URLs and `playlist.json` expand into a queue and fetch on demand; the server starts immediately instead of waiting for bulk downloads.
+- Every downloaded video is normalized to H.264/AAC constant frame rate, so A/V sync holds regardless of the source codec.
+
+**Folder mode** — drop videos into `videos/` and run:
 ```bash
 python stream_server.py --folder videos --cols 200
-python stream_server.py --folder videos --cols 230 --loop          # infinite loop
-python stream_server.py --folder videos --pixel --cols 320 --vol 2  # all videos same settings
+python stream_server.py --folder videos --cols 230 --loop
+python stream_server.py --folder videos --mode 5 --pixel --cols 320 --vol 2
 ```
-Videos play in **filesystem order** (top to bottom as they appear in the folder, not alphabetically). Just add/remove files from the `videos/` folder to control the queue.
+Videos play in filesystem order (as they appear in the folder, not alphabetically). Add/remove files to control the queue.
 
-**JSON Playlist — full control per video:**
+**JSON playlist** — per-video overrides:
 ```bash
 python stream_server.py --playlist playlist.json --cols 220
 python stream_server.py --playlist playlist.json --cols 220 --loop
 ```
-Use `playlist.json` when you need different `--mode` or `--vol` settings for each video.
-
 
 Open `http://localhost:8000` in your browser.
 
-### Player Controls
+### Player controls
 
-Hover previews are built once per video on first hover, in a single ffmpeg pass,
-and kept in memory — nothing written to disk. Disable with `--no-thumbnails`.
-To use a prebuilt sprite instead, point the `/scrub` route at it.
+Hover previews are built once per video on first hover, in a single ffmpeg pass, kept in memory — nothing written to disk. Disable with `--no-thumbnails`. To use a prebuilt sprite instead, point the `/scrub` route at it.
 
-### Live Webcam Streaming
-Stream directly from your local webcam with an automatic selfie-mirror view.
+### Live webcam streaming
+
 ```bash
 python stream_server.py --webcam --cols 240
 
-# Select a different camera device (e.g., 1) and set a target FPS
+# Different camera device and target FPS
 python stream_server.py --webcam --webcam-device 1 --webcam-fps 60
 
-# Disable the automatic horizontal mirror effect
+# Disable the automatic horizontal mirror
 python stream_server.py --webcam --no-mirror
-``` 
-### 4. Run directly in Terminal (Standalone)
-If you prefer to bypass the web interface, you can render the video directly inside an ANSI-supported terminal (zero-flicker, true color):
+```
+
+### 4. Run directly in a terminal (standalone)
+
+Bypass the web interface and render inside an ANSI-capable terminal (zero flicker, true color):
 ```bash
 python ascii_video_player2.py video.mp4 --cols 100 --quality 0
 
-# To run your webcam directly in the terminal:
+# Webcam directly in the terminal
 python ascii_video_player2.py --webcam --cols 100
-
 ```
 
-> ⚠️ **Note:** Do not resize your terminal window during playback, as dynamic text wrapping will corrupt the ASCII layout.
+> Don't resize the terminal window during playback — dynamic text wrapping will corrupt the layout.
 
-
-
-## 🎨 Customization
-
-You can easily customize the look and feel of the engine:
+## Customization
 
 ### Styling
-Edit `style.css` to change the accent colors and typography using CSS variables:
+Edit `style.css` to change accent colors and typography via CSS variables:
 ```css
 :root {
     --accent-color: #00ff41; /* Classic Matrix Green */
     --bg-color: #050505;
 }
 ```
-### 🎛️ Real-Time Frontend Filters & Palettes (ascii mod)
-ASCILINE includes a real-time post-processing engine built directly into the web interface.
-Click the **⚙FX** button on the player controls (or press the **`F`** key) to open the interactive TUI-style filter overlay.
-**Available Adjustments:**
-- **Contrast & Brightness:** Fine-tune the visual balance.
-- **Gamma:** Recover details from dark or washed-out sources.
-- **Sharpen:** Apply an Unsharp Mask (Level 0-10) to crisp up the ASCII definitions.
-- **Invert:** Instantly invert all brightness values.
-- **Palettes:** Switch between character sets on the fly:
-  - `Default`: The full, detailed ASCII ramp.
-  - `Flat/Anime`: A shortened, minimalist ramp (great for animations).
-  - `Block`: Chunky, dense characters for a retro terminal feel.
 
-### Rendering Modes
-The engine supports different fidelity levels via the `--mode` flag:
-- `1`: Black & White (DOM mode)
-- `2`: 64 colors
-- `3`: 512 colors
-- `4`: 32K colors
-- `5`: 262K colors
-- `6`: 16M colors (ultra)
+### Real-time frontend filters & palettes (ASCII modes)
+
+Click **FX** on the player controls (or press **F**) to open the filter overlay.
+
+- **Contrast** — adjust the difference between light and dark areas
+- **Brightness** — control the overall lightness of the output
+- **Gamma** — recover detail from dark/washed-out sources
+- **Sharpen** — Unsharp Mask, levels 0–10
+- **Invert** — instantly invert all brightness values
+- **Palettes** — swap character sets live:
+  - `Default`: full detailed ASCII ramp
+  - `Flat/Anime`: shortened, minimalist ramp (good for animation)
+  - `Block`: chunky, dense characters for a retro-terminal look
+
+### Rendering modes
 
 ```bash
-python stream_server.py --mode 6 --cols 240 --rows 100
+python stream_server.py --mode 5 --cols 240 --rows 100
 ```
-### 📐 Resolution & Auto-Scaling
-By default, you only need to specify the width (`--cols`). ASCILINE will automatically calculate the correct `--rows` based on the source video's aspect ratio to prevent stretching.
+- `1`: Black & White (DOM mode)
+- `2`: 512 colors
+- `3`: 32K colors
+- `4`: 262K colors
+- `5`: 16M colors (ultra)
 
-- **ASCII Mode Recommended:** `--cols 200` to `--cols 240` (Best balance of text detail and cinematic 30 FPS performance).
-- **Pixel Mode Recommended:** `--cols 600` to `--cols 900` (Provides near-HD visual quality. Performance heavily depends on your machine's CPU/VRAM).
-- > **Smart Defaults:** If you do not specify a `--cols` value, ASCILINE automatically defaults to `450` when Pixel Mode is enabled, and `200` for standard ASCII text mode. 
-- > ⚠️ **Hardware Limits & A/V Sync:** If you push the `--cols` too high for your specific hardware (e.g., `1350` on a laptop vs a gaming desktop), the Python backend won't be able to encode and send the massive frames fast enough. When the video stream lags behind the audio, you will experience A/V desync (audio finishing early). If this happens, simply lower your `--cols` value!
+### Resolution & auto-scaling
+
+Specify only `--cols`; ASCILINE derives `--rows` from the source aspect ratio.
+
+- ASCII mode: `--cols 200`–`240` (recommended starting point for the best balance of detail and 30 FPS performance; can be increased if your hardware allows).
+- Pixel mode: `--cols 600`–`900` (recommended starting point for near-HD quality; performance depends heavily on CPU).
+- If `--cols` isn't set, defaults are `450` in pixel mode and `200` in ASCII mode.
+- **Hardware limits & A/V sync:** pushing `--cols` beyond what your machine can encode/send in time causes the video to fall behind the audio (desync). If you see this, lower `--cols`.
+
 ```bash
 python stream_server.py video.mp4 --mode 5 --cols 240
-# Terminal will show: [AUTO] 1920x1080 → grid 240x67
+# Terminal shows: [AUTO] 1920x1080 → grid 240x67
 ```
-### Server-Side Volume Control
-Volume is controlled at the server level via the `--vol` flag (scale 0–5).
-When set to `0`, the audio engine (FFmpeg) **never runs**, saving CPU and bandwidth.
 
-| `--vol` | FFmpeg Multiplier | Description |
-|---------|------------------|-------------|
-| `0`     | —                | Muted (no processing) |
-| `1`     | 1.0×             | Normal (default) |
-| `3`     | 1.5×             | Loud |
-| `5`     | 2.0×             | Double volume |
+### Server-side volume control
+
+`--vol` (0–5). At `0`, FFmpeg's audio path never runs — saves CPU and bandwidth.
+
+| `--vol` | Multiplier | |
+|---------|------------|---|
+| `0` | — | Muted (no processing) |
+| `1` | 1.0× | Normal (default) |
+| `3` | 1.5× | Loud |
+| `5` | 2.0× | Double volume |
 
 ```bash
-python stream_server.py video.mp4 --pixel --cols 560 --vol 0   # Silent
-python stream_server.py video.mp4 --cols 220 --vol 3   # Loud
+python stream_server.py video.mp4 --pixel --cols 560 --vol 0   # silent
+python stream_server.py video.mp4 --cols 220 --vol 3           # loud
 ```
 
-### Playlist Format (`playlist.json`)
-Each entry can override the global `--mode`, `--pixel`, `--vol`, and `--cols` defaults:
+### Playlist format (`playlist.json`)
+
+Each entry can override the global `--mode`, `--pixel`, `--vol`, and `--cols`:
 ```json
 [
     { "video": "intro.mp4",  "mode": 1, "vol": 1 },
     { "video": "main.mp4",   "mode": 5, "pixel": true, "vol": 3, "cols": 520 },
-    { "video": "outro.mp4",  "mode": 3, "vol": 2, "cols": 240 }
+    { "video": "https://youtu.be/VIDEO_ID", "mode": 3, "vol": 2, "cols": 240 }
 ]
 ```
-Video paths are resolved automatically — the engine checks the project root and the `videos/` subfolder, so you can write just the filename.
+Paths are resolved automatically — the project root and `videos/` are both checked, so a filename alone is usually enough.
 
+## Live Demo
 
-### 🟢 Live Interactive Showcase
-Experience the ASCILINE engine running live directly in your browser with multiple rendering modes. 👉 **[Try it out at asciline.dev](https://www.asciline.dev)**
+Live, browser-based showcase across multiple rendering modes: **[asciline.dev](https://www.asciline.dev)**
 
+## Star History
+[![Star History Chart](https://stars.unv.one/svg/YusufB5/ASCILINE?theme=dark)](https://github.com/YusufB5/ASCILINE)
 
-## 📈 Star History
-[![Star History Chart](https://api.star-history.com/svg?repos=YusufB5/ASCILINE&type=Date)](https://star-history.com/#YusufB5/ASCILINE&Date)
+## Support ❤️
 
-### ☕ Support the Project ❤️ 
-If you find this project helpful, you can support me by donating crypto:
-* **Solana (SOL / USDC):** `H1wSQAhjgsu7AxenF4e5ZBYiBjkhDLVzkKaZuVPcrE14`
-* **Ethereum (ETH / USDT):** `0x85B2f970045c0F7c282089Ab6CF897C20230e086`
-* **Bitcoin (BTC):** `bc1qvtcl55v54gkzwnp2zxn70usea3gf5ncncqa0fv`
+If this project is useful to you, crypto donations are welcome:
+- **Solana (SOL / USDC):** `H1wSQAhjgsu7AxenF4e5ZBYiBjkhDLVzkKaZuVPcrE14`
+- **Ethereum (ETH / USDT):** `0x85B2f970045c0F7c282089Ab6CF897C20230e086`
+- **Bitcoin (BTC):** `bc1qvtcl55v54gkzwnp2zxn70usea3gf5ncncqa0fv`
 
-## 📜 License & Ethical Guardrails
+## License
 
-ASCILINE is distributed under the MIT License, but with an anti ad strict ethical guardrail. 
+ASCILINE is distributed under a Custom License (Based on MIT) which includes an anti-advertisement clause. See [LICENSE](LICENSE) for the full text.
 
-See the [LICENSE](LICENSE) file for the full text, which includes the **ANTI-ADVERTISEMENT RESTRICTION** clause.
 ## Community
 
-**Discord:** Come hang out with us! Join the [Codequerors Discord Server](https://discord.gg/DzMpbZGkWV) to discuss creative coding, share ideas, or contribute to ASCILINE!
+Join the [Codequerors Discord Server](https://discord.gg/DzMpbZGkWV) to discuss creative coding, share ideas, or contribute to ASCILINE.
 
-## 📬 Contact & Questions
+## Contact
+
 [asciline.engine@gmail.com](mailto:asciline.engine@gmail.com)
