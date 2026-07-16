@@ -23,12 +23,31 @@
   const TAG_RAW = 0, TAG_ZLIB = 1, TAG_DELTA = 2, TAG_RLE_FULL = 3, TAG_PROFILE = 4;
 
   async function inflate(bytes) {
-    // Python zlib.compress -> RFC1950 zlib wrapper -> 'deflate' here.
+    // Direct DecompressionStream pump — avoids the Blob+Response wrapper
+    // allocations that the old approach created on every single frame decode.
     const ds = new DecompressionStream('deflate');
-    const stream = new Blob([bytes]).stream().pipeThrough(ds);
-    const buf = await new Response(stream).arrayBuffer();
-    return new Uint8Array(buf);
+    const writer = ds.writable.getWriter();
+    const reader = ds.readable.getReader();
+
+    writer.write(bytes);
+    writer.close();
+
+    const chunks = [];
+    let totalLen = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      totalLen += value.length;
+    }
+
+    if (chunks.length === 1) return chunks[0];
+    const out = new Uint8Array(totalLen);
+    let off = 0;
+    for (const c of chunks) { out.set(c, off); off += c.length; }
+    return out;
   }
+
 
   // ===== Opt-in lossy DCT profile (tag 4, pixel mode). Deterministic constants,
   // bit-exact with codec.py: integer IDCT and integer YUV420 -> BGR.

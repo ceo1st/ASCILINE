@@ -151,7 +151,7 @@ def calc_auto_dimensions(cols: int, vid_w: int, vid_h: int, pixel_mode: bool) ->
     """
     # Pixel mode uses GPU-accelerated fillRect → generous cap
     # ASCII mode uses CPU fillText per cell → tight cap to prevent stutter on vertical videos
-    MAX_ROWS = 350 if pixel_mode else 100
+    MAX_ROWS = 1080 if pixel_mode else 300
     ratio = vid_w / max(vid_h, 1)
     
     if pixel_mode:
@@ -773,9 +773,10 @@ async def websocket_endpoint(websocket: WebSocket):
             # liveness: we always send a real frame at least this often, so a stalled
             # or non-reporting client can never be starved and a large delta gap is
             # bounded.
-            BACKLOG_HIGH = 8
-            MAX_CONSEC_DROPS = max(1, int(round(effective_fps)))  # ~1s of frames
+            BACKLOG_HIGH = 15
+            MAX_CONSEC_DROPS = max(1, int(round(effective_fps * 0.3)))  # ~300ms of frames
             client_backlog = 0   # latest depth reported by the client (0 = unknown/healthy)
+            consec_high_reports = 0 # hysteresis: consecutive reports exceeding BACKLOG_HIGH
             consec_drops = 0
 
             _loop = asyncio.get_event_loop()
@@ -797,13 +798,19 @@ async def websocket_endpoint(websocket: WebSocket):
                             start_time = _loop.time() - (frame_index * frame_t)
                             bw_start_time = time.time()
                             client_backlog = 0  # stale across a seek
+                            consec_high_reports = 0
                             consec_drops = 0
                         elif msg.get("type") == "buffer":
                             # Client's current decoded-frame backlog (frameBuffer.length).
                             try:
                                 client_backlog = max(0, int(msg.get("depth", 0)))
+                                if client_backlog > BACKLOG_HIGH:
+                                    consec_high_reports += 1
+                                else:
+                                    consec_high_reports = 0
                             except (TypeError, ValueError):
                                 client_backlog = 0
+                                consec_high_reports = 0
                         elif msg.get("type") == "filter":
                             # ── RUNTIME FILTER UPDATE ──
                             # Rebuild the mapper / LUT only when values actually change.
@@ -878,7 +885,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     # time-aligned with the audio/wall clock; prev_frame is held so the
                     # next sent frame is a correct delta across the gap. MAX_CONSEC_DROPS
                     # caps the gap and guarantees we never starve the client.
-                    if client_backlog > BACKLOG_HIGH and consec_drops < MAX_CONSEC_DROPS:
+                    if consec_high_reports >= 2 and consec_drops < MAX_CONSEC_DROPS:
+                        print(f"[Backpressure] dropping frame {frame_index}, client_backlog={client_backlog}, consec_drops={consec_drops}", flush=True)
                         advanced = await _loop.run_in_executor(None, advance_one)
                         if not advanced:
                             break
@@ -891,6 +899,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             await asyncio.sleep(wait)
                         continue
                     consec_drops = 0
+
 
                     # ALL CPU work in thread pool — event loop stays 100% free
                     result = await _loop.run_in_executor(
@@ -1184,6 +1193,19 @@ if __name__ == "__main__":
             elif choice == 'n':
                 print("Exiting...")
                 exit(0)
+
+    # ── Warm-up Cache ──
+    # Force the OS to load the first video into RAM cache before any client connects,
+    # eliminating the initial multi-second startup lag (cold cache).
+    if queue:
+        try:
+            print(" \033[90m▶ Warming up cache for first video...\033[0m", end="", flush=True)
+            warm_decoder = VideoDecoder(queue[0]["video"], cols=2, rows=2)
+            warm_decoder.grab()
+            warm_decoder.release()
+            print("\r\033[K", end="")
+        except Exception as e:
+            print(f"\r\033[K \033[33m▶ Warmup failed (non-fatal): {e}\033[0m")
 
     # ── Startup Banner ──
     print(ASCII_LOGO)

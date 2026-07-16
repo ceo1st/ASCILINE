@@ -156,6 +156,37 @@ function buildCanvas(cols, rows) {
 }
 
 // ═══════════════════════════════════════
+//  STARTUP SYNC LOGIC (VIDEO GATE)
+// ═══════════════════════════════════════
+const beginRendering = () => {
+    if (readyToRender) return;
+    readyToRender = true;
+    streamStartTime = performance.now();
+    lastRenderTime = performance.now();
+    lastFpsUpdate = lastRenderTime;
+    requestAnimationFrame(renderFrame);
+    startBufferReports();
+};
+
+const triggerPlaybackStart = () => {
+    if (readyToRender || state !== 'PLAYING') return;
+    if (audioEl) {
+        // The very first video frame has arrived and is ready.
+        // Now it is safe to start the audio clock.
+        audioEl.play().catch(() => {});
+        // Audio Gate: Wait for actual playback so clocks match exactly
+        if (audioEl.readyState >= 3) {
+            beginRendering();
+        } else {
+            audioEl.addEventListener('playing', beginRendering, { once: true });
+            setTimeout(() => { if (!readyToRender) beginRendering(); }, 500);
+        }
+    } else {
+        beginRendering();
+    }
+};
+
+// ═══════════════════════════════════════
 //  STREAM CONTROL
 // ═══════════════════════════════════════
 
@@ -226,31 +257,35 @@ function connectWebSocket() {
                     codecDecoder = null;
                 }
 
-                // Sequential decode queue: ensures each frame is decoded strictly in
-                // arrival order. Without this, a fast Delta can overtake a slow
-                // Keyframe/ZLIB inflate and patch the wrong `prev` frame, causing
-                // visual corruption and the initial stutter.
+                // Sequential decode queue — reset on each new stream so deltas
+                // never race ahead of keyframes across playlist transitions.
                 decodeQueue = Promise.resolve();
 
+                // ── AUDIO READY GATE ──
+                // Hold rendering until audio actually starts. Without this, the
+                // master clock (audioEl.currentTime) snaps forward the moment audio
+                // loads, making renderFrame think it's behind and draining the whole
+                // buffer in one go — visible as a sudden freeze on heavy footage.
+                // The decodeQueue above already prevents delta/keyframe races, so
+                // restoring the gate does NOT bring back the old startup stutter.
+                readyToRender = false;
                 state = 'PLAYING';
-                readyToRender = true;
 
-                if (audioEl) {
-                    audioEl.pause();
-                    const qs = currentQueueIndex !== null ? `?v=${currentQueueIndex}&` : '?';
-                    audioEl.src = `/audio${qs}t=${Date.now()}`;
-                    audioEl.volume = volumeSlider ? volumeSlider.value : 1.0;
-                    audioEl.load();
-                    audioEl.play().catch(() => {});
-                }
 
-                streamStartTime = performance.now();
-                lastRenderTime = performance.now();
-                lastFpsUpdate = lastRenderTime;
-                requestAnimationFrame(renderFrame);
-                startBufferReports();
-                
+
+                    if (audioEl) {
+                        audioEl.pause();
+                        const qs = currentQueueIndex !== null ? `?v=${currentQueueIndex}&` : '?';
+                        audioEl.src = `/audio${qs}t=${Date.now()}`;
+                        audioEl.volume = volumeSlider ? volumeSlider.value : 1.0;
+                        audioEl.load();
+                        // VIDEO GATE: Do not play audio or start rendering yet!
+                        // We will wait until the very first video frame has arrived
+                        // and been decoded into the frameBuffer.
+                    }
+
                 return;
+
             }
             
             // Mode 1: Text Frame with Timestamp
@@ -260,6 +295,7 @@ function connectWebSocket() {
             const frameTime = frameIndex / targetFps;
             const frameData = text.substring(newlineIdx + 1);
             frameBuffer.push({ data: frameData, time: frameTime });
+            triggerPlaybackStart();
         } else {
             // Binary Frames — decoded via adaptive codec (raw/zlib/delta)
             if (codecDecoder) {
@@ -271,6 +307,7 @@ function connectWebSocket() {
                         framesInFlight--;
                         const frameTime = frameIndex / targetFps;
                         frameBuffer.push({ data: frame, time: frameTime });
+                        triggerPlaybackStart();
                     }).catch(e => {
                         framesInFlight--;
                         console.error("Decode error", e);
@@ -284,6 +321,7 @@ function connectWebSocket() {
                 const frameTime = frameIndex / targetFps;
                 const frameData = new Uint8Array(buffer, 4);
                 frameBuffer.push({ data: frameData, time: frameTime });
+                triggerPlaybackStart();
             }
         }
 
@@ -342,6 +380,7 @@ function renderFrame(now) {
     while (frameBuffer.length > 0 && frameBuffer[0].time < masterClock - 0.1) {
         frameBuffer.shift();
     }
+
     
     if (frameBuffer.length === 0) return;
 
