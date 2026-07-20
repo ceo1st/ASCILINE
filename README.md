@@ -20,6 +20,23 @@
 | <img src="https://github.com/user-attachments/assets/6bd7f5c0-81de-49fe-ba0d-9a8872ec8ae3" width="400" alt="ASCII Mode" /> | **ASCII Mode**<br>Rendered using Mode 3 (32K colors) from a 30fps source. |
 | <img src="https://github.com/user-attachments/assets/1fd88c3d-97d1-441a-a071-16de24ea82c0" width="400" alt="PIXEL Mode" /> | **PIXEL Mode**<br>Rendered using Mode 5 (16M colors) combined with the `--pixel` flag for ultra-high fidelity. |
 
+## Table of Contents
+
+- [Design Goals](#design-goals)
+- [Technical Features](#technical-features)
+- [Architecture](#architecture)
+- [Adaptive Frame Codec (opt-in, ASCII modes 2–5)](#adaptive-frame-codec-opt-in-ascii-modes-25)
+- [Zero-Dependency Static Web Player](#zero-dependency-static-web-player)
+- [Installation](#installation)
+- [Customization](#customization)
+- [Troubleshooting](#troubleshooting)
+- [Live Demo](#live-demo)
+- [Star History](#star-history)
+- [Support ❤️](#support-)
+- [License](#license)
+- [Community](#community)
+- [Contact](#contact)
+
 ## Design Goals
 
 1. **Pure typographic manipulation**: the visual stream is raw HTML/Canvas text, not a standard media file. That means real-time CSS filters (glows, shadows, animations) can be applied directly to what would otherwise be a video.
@@ -108,6 +125,12 @@ Place the generated `.ascf` next to `static_player/index.html` and open it throu
 > **Best practice:** compile short clips (under 5–10 minutes). `.ascf` stores raw render instructions for the canvas, so full-length movies can produce file sizes that exceed your browser's memory limits.
 
 ## Installation
+
+### 0. Requirements
+
+- **Python 3.9+**
+- FFmpeg & FFprobe (see below — required for audio and thumbnails)
+- A modern browser for the web player (any browser with Canvas + WebSocket support)
 
 ### 1. Clone the repository
 ```bash
@@ -282,6 +305,19 @@ Each entry can override the global `--mode`, `--pixel`, `--vol`, and `--cols`:
 ]
 ```
 Paths are resolved automatically — the project root and `videos/` are both checked, so a filename alone is usually enough.
+
+## Troubleshooting
+
+Quick fixes for the most common issues. Full protocol/technical details will live in a separate technical guide (coming soon).
+
+- **Audio and video fall out of sync** — you've pushed `--cols` higher than your machine can encode/send in time. Lower `--cols` until playback keeps up. See [Resolution & auto-scaling](#resolution--auto-scaling).
+- **`FileNotFoundError` for `ffmpeg`/`ffprobe` (usually Windows)** — FFmpeg isn't on your PATH. Either install it via `winget install ffmpeg`, or manually drop `ffmpeg.exe`/`ffprobe.exe` next to `stream_server.py`. See [FFmpeg & FFprobe](#ffmpeg--ffprobe-required-for-audio-and-thumbnails).
+- **Terminal playback layout breaks / garbles mid-video** — don't resize the terminal window while `ascii_video_player2.py` is running; dynamic text wrapping corrupts the fixed-grid layout.
+- **YouTube/URL playback fails or hangs** — make sure `yt-dlp` is installed (`pip install yt-dlp`); it's an optional dependency and isn't required for local file playback.
+- **First-run YouTube video is slow to start** — the server downloads and normalizes it to H.264/AAC first; every replay afterward is served instantly from the `videos/` cache.
+- **Disk filling up from cached downloads** — set a lower `--cache-limit` (in MB) to cap the LRU video cache.
+- **Studio (browser compiler) output is bigger than expected, or compiling takes a long time** — the browser-side encoder only emits RAW/ZLIB/DELTA (no RLE_FULL) and is meant for short clips. For long or size-sensitive videos, use the Python compiler (`static_player/compiler.py`) instead.
+- **Compiled `.ascf` file won't play / browser runs out of memory** — keep compiled clips under 5–10 minutes; `.ascf` stores raw render instructions, so long videos can exceed browser memory limits.
 
 ## Live Demo
 
