@@ -48,9 +48,11 @@ class AscilinePlayer {
 
         this.loop = options.loop !== undefined ? options.loop : true;
         this.muted = options.muted || false;
+        this.bufferAll = options.bufferAll || false;
 
         this.state = 'IDLE'; // IDLE | PLAYING | PAUSED
         this.frameBuffer = [];
+        this.allFrames = []; // Used if bufferAll is true
         this.BUFFER_SIZE = 60;
         this.codecDecoder = null;
         this.targetFps = 24;
@@ -227,7 +229,7 @@ class AscilinePlayer {
             let headerParsed = false;
             
             while (this.isStreaming) {
-                if (this.frameBuffer.length >= 90) {
+                if (!this.bufferAll && (this.frameBuffer.length + this.pendingDecodes) >= 90) {
                     await new Promise(r => setTimeout(r, 50));
                     continue;
                 }
@@ -307,6 +309,7 @@ class AscilinePlayer {
                                 const frameIndex = parseInt(text.substring(0, newlineIdx));
                                 const frameTime = frameIndex / this.targetFps;
                                 const frameData = text.substring(newlineIdx + 1);
+                                if (this.bufferAll) this.allFrames.push({ data: frameData, time: frameTime });
                                 this.frameBuffer.push({ data: frameData, time: frameTime });
                             } else if (this.codecDecoder) {
                                 const capturedBytes = frameBytes;
@@ -314,6 +317,7 @@ class AscilinePlayer {
                                 this.decodeQueue = this.decodeQueue.then(() =>
                                     this.codecDecoder.decode(capturedBytes).then(({ frameIndex, frame }) => {
                                         const frameTime = frameIndex / this.targetFps;
+                                        if (this.bufferAll) this.allFrames.push({ data: frame, time: frameTime });
                                         this.frameBuffer.push({ data: frame, time: frameTime });
                                         this.pendingDecodes--;
                                     }).catch(() => { this.pendingDecodes--; })
@@ -447,6 +451,7 @@ class AscilinePlayer {
         this.state = 'IDLE';
         this.isStreaming = false;
         this.frameBuffer = [];
+        this.allFrames = [];
         this.decodeQueue = Promise.resolve();
         this.pendingDecodes = 0;
         if (this.fetchAbortController) {
@@ -467,7 +472,6 @@ class AscilinePlayer {
         }
         this.readyToRender = false;
         this.pauseStartTime = 0;
-        this.frameBuffer.length = 0;
     }
 
     togglePause() {
@@ -505,6 +509,32 @@ class AscilinePlayer {
             this.lastFpsUpdate = performance.now();
             this.frameCount = 0;
             requestAnimationFrame(this.renderFrame);
+        }
+    }
+
+    seek(targetSec) {
+        if (!this.bufferAll) return;
+        if (this.totalDuration > 0) {
+            targetSec = Math.max(0, Math.min(targetSec, this.totalDuration));
+        }
+
+        this.frameBuffer = this.allFrames.filter(f => f.time >= targetSec);
+
+        if (this.audioEl) {
+            this.audioEl.currentTime = targetSec;
+            if (this.state === 'PLAYING') {
+                this.audioEl.play().catch(() => {});
+            }
+        }
+
+        this.streamStartTime = performance.now() - (targetSec * 1000);
+        this.currentTime = targetSec;
+
+        if (this.state !== 'PLAYING') {
+            const tempState = this.state;
+            this.state = 'PLAYING';
+            this.renderFrame(performance.now());
+            this.state = tempState;
         }
     }
 }

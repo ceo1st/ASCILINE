@@ -44,7 +44,7 @@ def compile_video(args):
         return
 
     out_name = args.out or os.path.splitext(os.path.basename(video_path))[0]
-    out_dir = "."
+    out_dir = os.path.dirname(os.path.abspath(__file__))
     os.makedirs(out_dir, exist_ok=True)
     
     ascf_path = os.path.join(out_dir, f"{out_name}.ascf")

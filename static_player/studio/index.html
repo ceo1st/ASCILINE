@@ -85,7 +85,9 @@
   .play-overlay .t{font-family:var(--mono);font-size:12px;letter-spacing:1px;opacity:.85}
   .stage-hint{font-size:11px;color:var(--muted);margin-top:8px;font-family:var(--mono)}
   .foot{margin-top:26px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px}
-  .foot code{font-family:var(--mono)}
+  .stage-controls { display:flex; align-items:center; gap:10px; margin-top:10px; padding:0 8px; }
+  .stage-controls input[type="range"] { flex:1; cursor:pointer; accent-color:var(--accent); }
+  .stage-controls span { font-family:var(--mono); font-size:12px; color:var(--muted); min-width:40px; }
 
   a:focus-visible,button:focus-visible,input:focus-visible,[role="button"]:focus-visible{
     outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
@@ -157,6 +159,11 @@
         <div class="t">Compile a video or drop a .ascf</div>
       </div>
     </div>
+    <div class="stage-controls" id="stage-controls" style="opacity:0.5; pointer-events:none;">
+      <span id="st-time">0:00</span>
+      <input type="range" id="st-seek" min="0" max="100" value="0" step="0.1">
+      <span id="st-dur" style="text-align:right">0:00</span>
+    </div>
     <div class="stage-hint">Renders on a canvas, so it keeps animating where a muted &lt;video autoplay&gt; would be blocked (e.g. iOS Low Power Mode).</div>
   </section>
 
@@ -167,13 +174,65 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
-<script src="../../codec.js"></script>
+<script src="../codec.js"></script>
 <script src="../reader.js"></script>
 <script src="./encoder.js"></script>
 <script>
 (function(){
   var stage = document.getElementById('stage');
-  var player = new AscilinePlayer(stage, { loop:true });
+  var player = new AscilinePlayer(stage, { loop:true, bufferAll:true });
+
+  var seekSlider = document.getElementById('st-seek');
+  var timeCur = document.getElementById('st-time');
+  var timeDur = document.getElementById('st-dur');
+  var stControls = document.getElementById('stage-controls');
+
+  function fmtTime(s) {
+    if (isNaN(s)) return '0:00';
+    var m = Math.floor(s/60), sec = Math.floor(s%60);
+    return m + ':' + (sec<10?'0':'') + sec;
+  }
+
+  var isUserSeeking = false;
+
+  // Update UI loop
+  function updateUI() {
+    requestAnimationFrame(updateUI);
+    if (!player || player.state === 'IDLE' || player.totalDuration <= 0) return;
+    
+    stControls.style.opacity = '1';
+    stControls.style.pointerEvents = 'auto';
+    
+    if (!isUserSeeking) {
+      seekSlider.max = player.totalDuration;
+      seekSlider.value = player.currentTime;
+      timeCur.textContent = fmtTime(player.currentTime);
+    }
+    timeDur.textContent = fmtTime(player.totalDuration);
+  }
+  requestAnimationFrame(updateUI);
+
+  seekSlider.addEventListener('mousedown', function() { isUserSeeking = true; });
+  seekSlider.addEventListener('touchstart', function() { isUserSeeking = true; });
+  
+  // input fires repeatedly as slider is dragged
+  seekSlider.addEventListener('input', function() {
+    timeCur.textContent = fmtTime(seekSlider.value);
+    if (player) {
+      // Optional: live seeking while dragging
+      player.seek(parseFloat(seekSlider.value));
+    }
+  });
+
+  // change fires when dragging stops
+  seekSlider.addEventListener('change', function() {
+    if (player) player.seek(parseFloat(seekSlider.value));
+    isUserSeeking = false;
+  });
+  
+  // fallback for mouse leaving area
+  seekSlider.addEventListener('mouseup', function() { isUserSeeking = false; });
+  seekSlider.addEventListener('touchend', function() { isUserSeeking = false; });
 
   var lastUrl = null, lastAudioUrl = null;
   function loadIntoPlayer(url, audioUrl){
